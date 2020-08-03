@@ -9,7 +9,7 @@ import isValid from "is-valid-path"
 import sysPath from "path"
 import prompts from "prompts"
 import url from "url"
-
+import { createServiceLock } from "gatsby-core-utils/dist/service-lock"
 import report from "./reporter"
 import { getPackageManager, promptPackageManager } from "./util/package-manager"
 import { isTTY } from "./util/is-tty"
@@ -341,8 +341,24 @@ export async function initStarter(
   trackCli(`NEW_PROJECT`, {
     starterName: hostedInfo ? hostedInfo.shortcut() : `local:starter`,
   })
-  if (hostedInfo) await clone(hostedInfo, rootPath)
-  else await copy(starterPath, rootPath)
+  if (hostedInfo) {
+    await clone(hostedInfo, rootPath)
+  } else {
+    await copy(starterPath, rootPath)
+  }
+
+  const sitePath = sysPath.resolve(rootPath)
+
+  const sitePackageJson = await fs
+    .readJSON(sysPath.join(sitePath, `package.json`))
+    .catch(() => {})
+
+  await createServiceLock(sitePath, `metadata`, {
+    name: sitePackageJson?.name || rootPath,
+    sitePath,
+    lastRun: Date.now(),
+  }).then(unlock => unlock?.())
+
   successMessage(rootPath)
   trackCli(`NEW_PROJECT_END`)
 }
